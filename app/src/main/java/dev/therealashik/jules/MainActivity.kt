@@ -17,6 +17,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -45,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -374,7 +378,7 @@ private fun Composer(value: String, onValueChange: (String) -> Unit, sending: Bo
     val borderBrush = Brush.linearGradient(listOf(Color(0xFF8CAEFF), Color(0xFF78C5E8), Color(0xFFB6A1FF)))
     Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp).shadow(4.dp, RoundedCornerShape(26.dp)).clip(RoundedCornerShape(26.dp)).background(MaterialTheme.colorScheme.surface).border(BorderStroke(1.dp, borderBrush), RoundedCornerShape(26.dp)).padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.Bottom) {
         BasicTextField(value = value, onValueChange = onValueChange, modifier = Modifier.weight(1f).heightIn(min = 42.dp, max = 120.dp).padding(vertical = 10.dp), enabled = enabled && !sending,
-            textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface), cursorBrush = Brush.solidColor(MaterialTheme.colorScheme.primary), maxLines = 5, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences), decorationBox = { inner -> Box { if (value.isBlank()) Text(if (enabled) "Message Jules…" else "This session is no longer accepting messages", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant); inner() } })
+            textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface), cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), maxLines = 5, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences), decorationBox = { inner -> Box { if (value.isBlank()) Text(if (enabled) "Message Jules…" else "This session is no longer accepting messages", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant); inner() } })
         Spacer(Modifier.width(8.dp))
         FilledIconButton(onClick = onSend, enabled = enabled && value.isNotBlank() && !sending, modifier = Modifier.size(44.dp), shape = CircleShape) {
             if (sending) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Icon(Icons.Default.Send, contentDescription = "Send message")
