@@ -1,0 +1,121 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'app/**'
+      - 'gradle/**'
+      - 'gradle.properties'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - '.github/workflows/build.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'app/**'
+      - 'gradle/**'
+      - 'gradle.properties'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build debug APK
+    runs-on: ubuntu-latest
+    outputs:
+      artifact_name: ${{ steps.meta.outputs.artifact_name }}
+      apk_name: ${{ steps.meta.outputs.apk_name }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      # This source project has no Gradle wrapper; install the compatible Gradle 8.9 distribution.
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build Android debug APK
+        run: gradle :app:assembleDebug --no-daemon
+
+      - name: Name artifact
+        id: meta
+        shell: bash
+        run: |
+          short_sha="${GITHUB_SHA::7}"
+          apk_name="jules-android-debug-${short_sha}.apk"
+          mv app/build/outputs/apk/debug/app-debug.apk "app/build/outputs/apk/debug/${apk_name}"
+          echo "short_sha=${short_sha}" >> "$GITHUB_OUTPUT"
+          echo "apk_name=${apk_name}" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=jules-android-debug-${short_sha}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK to GitHub Actions
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.artifact_name }}
+          path: app/build/outputs/apk/debug/${{ steps.meta.outputs.apk_name }}
+          if-no-files-found: error
+          retention-days: 14
+
+  send-to-telegram:
+    name: Send successful build to Telegram
+    needs: build
+    if: ${{ github.event_name != 'pull_request' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download built APK
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact_name }}
+          path: downloaded-artifact
+
+      - name: Upload APK document to Telegram
+        continue-on-error: true
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_TOPIC_ID: ${{ secrets.TELEGRAM_TOPIC_ID }}
+          APK_NAME: ${{ needs.build.outputs.apk_name }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${TELEGRAM_BOT_TOKEN:-}" || -z "${TELEGRAM_CHAT_ID:-}" ]]; then
+            echo '::warning::Telegram delivery skipped. Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID repository secrets; TELEGRAM_TOPIC_ID is optional.'
+            exit 0
+          fi
+          apk_path="downloaded-artifact/${APK_NAME}"
+          test -f "$apk_path"
+          caption="$(printf 'Jules Android debug APK\nRepository: %s\nBranch: %s\nCommit: %s\nRun: %s/%s/actions/runs/%s' \
+            "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME" "${GITHUB_SHA:0:7}" \
+            "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          form_args=(--form-string "chat_id=$TELEGRAM_CHAT_ID")
+          if [[ -n "${TELEGRAM_TOPIC_ID:-}" ]]; then
+            form_args+=(--form-string "message_thread_id=$TELEGRAM_TOPIC_ID")
+          fi
+          form_args+=(--form-string "caption=$caption")
+          curl --fail-with-body --silent --show-error --max-time 300 \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
+            "${form_args[@]}" \
+            --form "document=@${apk_path};type=application/vnd.android.package-archive"
